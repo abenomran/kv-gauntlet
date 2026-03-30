@@ -1,0 +1,31 @@
+[package]
+name = "consistency-lab"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Async runtime — the engine that actually runs our async code
+tokio = { version = "1", features = ["full"] }
+
+# Lets us define async functions inside traits
+async-trait = "0.1"
+
+# etcd client
+etcd-client = "0.12"
+
+# Cassandra client
+scylla = "0.12"
+
+# TOML config file parsing
+toml = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Timestamp + time utilities
+chrono = "0.4"
+
+# CSV writing for metrics
+csv = "1"
+
+[dev-dependencies]
+tokio-test = "0.4"
