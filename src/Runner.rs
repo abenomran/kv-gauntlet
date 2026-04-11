@@ -12,7 +12,7 @@ use crate::workload::{next_operation, Operation, WorkloadType};
 /// 2. Injects a fault at the configured time (if any)
 /// 3. Records all metrics in real time
 pub async fn run(config: &Config, store: Arc<dyn KvStore>) -> Result<(), Box<dyn std::error::Error>> {
-    let mut metrics = MetricsWriter::new(&config.output_file)?;
+    let mut metrics = MetricsWriter::new(&config.system, &config.workload)?;
 
     let workload_kind = WorkloadType::from_str(&config.workload)
         .ok_or("Unknown workload type in config")?;
