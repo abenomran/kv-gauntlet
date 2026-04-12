@@ -1,29 +1,63 @@
 use async_trait::async_trait;
+use scylla::{Session, SessionBuilder};
+use std::sync::Arc;
 use super::{KvStore, StoreError};
 
-/// Wraps a Cassandra/Scylla session and implements KvStore.
 pub struct CassandraStore {
-    // TODO: hold the scylla Session here once connected
+    session: Arc<Session>,
 }
 
 impl CassandraStore {
-    /// Connect to a Cassandra cluster.
-    /// `nodes` is a list of contact points, e.g. ["127.0.0.1:9042"]
     pub async fn connect(nodes: Vec<String>) -> Result<Self, StoreError> {
-        // TODO: use scylla::SessionBuilder
-        todo!("Cassandra connection not yet implemented")
+        let session = SessionBuilder::new()
+            .known_nodes(&nodes)
+            .build()
+            .await?;
+
+        session.query(
+            "CREATE KEYSPACE IF NOT EXISTS consistency_lab \
+             WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 3}",
+            &[],
+        ).await?;
+
+        session.query(
+            "CREATE TABLE IF NOT EXISTS consistency_lab.kv_store \
+             (key text PRIMARY KEY, value text)",
+            &[],
+        ).await?;
+
+        Ok(Self {
+            session: Arc::new(session),
+        })
     }
 }
 
 #[async_trait]
 impl KvStore for CassandraStore {
     async fn put(&self, key: &str, value: &str) -> Result<(), StoreError> {
-        // TODO: execute INSERT CQL statement
-        todo!()
+        self.session.query(
+            "INSERT INTO consistency_lab.kv_store (key, value) VALUES (?, ?)",
+            (key, value),
+        ).await?;
+
+        Ok(())
     }
 
     async fn get(&self, key: &str) -> Result<Option<String>, StoreError> {
-        // TODO: execute SELECT CQL statement
-        todo!()
+        let result = self.session.query(
+            "SELECT value FROM consistency_lab.kv_store WHERE key = ?",
+            (key,),
+        ).await?;
+
+        if let Some(rows) = result.rows {
+            if let Some(row) = rows.into_iter().next() {
+                let value: Option<String> = row.columns[0]
+                    .as_ref()
+                    .and_then(|v| v.as_text().map(|s| s.to_owned()));
+                return Ok(value);
+            }
+        }
+
+        Ok(None)
     }
 }
