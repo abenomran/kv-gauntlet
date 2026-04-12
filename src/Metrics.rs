@@ -5,6 +5,7 @@ use chrono::Local;
 
 /// One recorded data point per request
 pub struct MetricEntry {
+    pub key: String,
     pub system: String,
     pub workload: String,
     pub operation: String, // "GET" or "PUT"
@@ -39,7 +40,7 @@ impl MetricsWriter {
         let mut writer = BufWriter::new(file);
 
         // write header row
-        writeln!(writer, "timestamp,elapsed_seconds,system,workload,operation,latency_ms,success")?;
+        writeln!(writer, "timestamp,elapsed_seconds,system,workload,operation,key,latency_ms,success")?;
         writer.flush()?;
 
         Ok(Self { 
@@ -54,12 +55,13 @@ impl MetricsWriter {
         let timestamp = Local::now().to_rfc3339();
         writeln!(
             self.writer,
-            "{},{:.3},{},{},{},{:.3},{}",
+            "{},{:.3},{},{},{},{},{:.3},{}",
             timestamp,
             elapsed,
             entry.system,
             entry.workload,
             entry.operation,
+            entry.key,
             entry.latency_ms,
             entry.success,
         )?;

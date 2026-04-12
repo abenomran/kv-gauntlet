@@ -3,6 +3,7 @@ mod metrics;
 mod runner;
 mod workload;
 mod systems;
+mod dataset;
 
 use std::sync::Arc;
 use config::Config;
@@ -12,7 +13,7 @@ use systems::cassandra::CassandraStore;
 async fn main() {
     let config = Config::load("config.toml").expect("Failed to load config.toml");
 
-    println!("Starting consistency-lab");
+    println!("Starting gauntlet!");
     println!("System:   {}", config.system);
     println!("Workload: {}", config.workload);
     println!("Duration: {}s", config.duration_seconds);
@@ -26,7 +27,10 @@ async fn main() {
             .expect("Failed to connect to Cassandra");
 
             let store = Arc::new(store);
-            runner::run(&config, store).await.expect("Experiment failed");
+            let dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
+                .expect("Failed to load dataset");
+
+            runner::run(&config, store, dataset).await.expect("Experiment failed");
         }
         other => {
             eprintln!("Unknown system: {}. Supported: cassandra", other);

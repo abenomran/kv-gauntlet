@@ -6,12 +6,13 @@ use crate::config::Config;
 use crate::metrics::{MetricEntry, MetricsWriter};
 use crate::systems::KvStore;
 use crate::workload::{next_operation, Operation, WorkloadType};
+use crate::dataset::Dataset;
 
 /// Runs the full experiment:
 /// 1. Sends workload requests for the configured duration
 /// 2. Injects a fault at the configured time (if any)
 /// 3. Records all metrics in real time
-pub async fn run(config: &Config, store: Arc<dyn KvStore>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run(config: &Config, store: Arc<dyn KvStore>, dataset: Dataset) -> Result<(), Box<dyn std::error::Error>> {
     let mut metrics = MetricsWriter::new(&config.system, &config.workload)?;
 
     let workload_kind = WorkloadType::from_str(&config.workload)
@@ -45,17 +46,17 @@ pub async fn run(config: &Config, store: Arc<dyn KvStore>) -> Result<(), Box<dyn
 
     // Main workload loop
     while start.elapsed() < duration {
-        let op = next_operation(&workload_kind, i);
+        let op = next_operation(&workload_kind, &dataset, i);
 
         let op_start = Instant::now();
 
         // Run the operation and record success/failure
-        let (op_name, result) = match &op {
+        let (op_name, op_key, result) = match &op {
             Operation::Put { key, value } => {
-                ("PUT", store.put(key, value).await.map(|_| ()))
+                ("PUT", key.clone(), store.put(key, value).await.map(|_| ()))
             }
             Operation::Get { key } => {
-                ("GET", store.get(key).await.map(|_| ()))
+                ("GET", key.clone(), store.get(key).await.map(|_| ()))
             }
         };
 
@@ -63,6 +64,7 @@ pub async fn run(config: &Config, store: Arc<dyn KvStore>) -> Result<(), Box<dyn
         let success = result.is_ok();
 
         metrics.record(&MetricEntry {
+            key:        op_key,
             system:     config.system.clone(),
             workload:   config.workload.clone(),
             operation:  op_name.to_string(),

@@ -23,3 +23,5 @@ target
 # project ignores
 results/
 *.csv
+dataset/*.json
+
