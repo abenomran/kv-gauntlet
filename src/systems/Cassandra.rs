@@ -35,19 +35,22 @@ impl CassandraStore {
 #[async_trait]
 impl KvStore for CassandraStore {
     async fn put(&self, key: &str, value: &str) -> Result<(), StoreError> {
-        self.session.query(
-            "INSERT INTO consistency_lab.kv_store (key, value) VALUES (?, ?)",
-            (key, value),
-        ).await?;
-
+        use scylla::statement::Consistency;
+        let mut query = scylla::query::Query::new(
+            "INSERT INTO consistency_lab.kv_store (key, value) VALUES (?, ?)"
+        );
+        query.set_consistency(Consistency::Quorum);
+        self.session.query(query, (key, value)).await?;
         Ok(())
     }
 
     async fn get(&self, key: &str) -> Result<Option<String>, StoreError> {
-        let result = self.session.query(
-            "SELECT value FROM consistency_lab.kv_store WHERE key = ?",
-            (key,),
-        ).await?;
+        use scylla::statement::Consistency;
+        let mut query = scylla::query::Query::new(
+            "SELECT value FROM consistency_lab.kv_store WHERE key = ?"
+        );
+        query.set_consistency(Consistency::Quorum);
+        let result = self.session.query(query, (key,)).await?;
 
         if let Some(rows) = result.rows {
             if let Some(row) = rows.into_iter().next() {

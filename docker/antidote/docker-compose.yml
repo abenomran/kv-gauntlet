@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   antidote1:
     image: antidotedb/antidote

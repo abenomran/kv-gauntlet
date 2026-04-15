@@ -55,7 +55,7 @@ impl MetricsWriter {
         let timestamp = Local::now().to_rfc3339();
         writeln!(
             self.writer,
-            "{},{:.3},{},{},{},{},{:.3},{}",
+            "{},{:.3},{},{},{},\"{}\",{:.3},{}",
             timestamp,
             elapsed,
             entry.system,
