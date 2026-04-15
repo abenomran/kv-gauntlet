@@ -76,5 +76,20 @@ pub async fn run(config: &Config, store: Arc<dyn KvStore>, dataset: Dataset) -> 
     }
 
     println!("Experiment complete. {} operations ran.", i);
+
+    // restore containers the experiment finishes
+    if let Some(fault) = &config.fault {
+        if let Some(restore) = &fault.restore_script {
+            println!(">>> Restoring cluster...");
+            let status = std::process::Command::new("bash")
+                .arg(restore)
+                .status();
+            match status {
+                Ok(s) => println!(">>> Restore script exited with: {}", s),
+                Err(e) => println!(">>> Failed to run restore script: {}", e),
+            }
+        }
+    }
+
     Ok(())
 }

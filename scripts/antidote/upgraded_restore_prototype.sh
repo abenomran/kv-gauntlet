@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-COMPOSE_FILE="docker/etcd/docker-compose.yml"
-MAX_WAIT_SECONDS=120
+COMPOSE_FILE="docker/antidote/docker-compose.yml"
+MAX_WAIT_SECONDS=180
 STATUS_REFRESH_SECONDS=1
 SPINNER_INTERVAL=0.1
 
@@ -48,14 +48,9 @@ init_services() {
 
 check_service_health() {
   local service="$1"
-
-  if ! docker compose -f "$COMPOSE_FILE" ps -q "$service" >/dev/null 2>&1; then
-    echo "missing"
-    return 0
-  fi
-
   local cid
   cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$service" 2>/dev/null || true)"
+
   if [[ -z "$cid" ]]; then
     echo "starting"
     return 0
@@ -68,7 +63,7 @@ check_service_health() {
     return 0
   fi
 
-  if docker exec "$service" sh -c 'ETCDCTL_API=3 etcdctl --endpoints=http://127.0.0.1:2379 endpoint health >/dev/null 2>&1'; then
+  if docker logs "$cid" 2>&1 | grep -q "Application antidote started on node"; then
     echo "ready"
   else
     echo "starting"
@@ -110,7 +105,7 @@ draw_ui() {
   fi
 
   local lines=0
-  printf "\033[K${CYAN}Waiting for etcd cluster to become ready...${RESET}\n"
+  printf "\033[K${CYAN}Waiting for Antidote cluster to be restored...${RESET}\n"
   lines=$((lines + 1))
 
   printf "\033[K${BOLD}Nodes up: ${CYAN}%d/%d${RESET}\n" "$ready_count" "$total_count"
@@ -140,7 +135,11 @@ draw_ui() {
 }
 
 main() {
-  echo "Starting etcd cluster..."
+  echo "Restoring Antidote cluster to clean state..."
+  docker compose -f "$COMPOSE_FILE" down -v
+
+  sleep 3
+
   docker compose -f "$COMPOSE_FILE" up -d
 
   init_services
@@ -167,7 +166,7 @@ main() {
     draw_ui "$spinner" "$ready_count" "${#SERVICES[@]}"
 
     if [[ "$ready_count" -eq "${#SERVICES[@]}" ]]; then
-      printf "\n${GREEN}✔ etcd cluster is ready.${RESET}\n"
+      printf "\n${GREEN}✔ Antidote cluster restored successfully.${RESET}\n"
       break
     fi
 
@@ -176,7 +175,7 @@ main() {
     elapsed=$((now - start_ts))
 
     if (( elapsed >= MAX_WAIT_SECONDS )); then
-      printf "\n${RED}✖ ERROR: etcd cluster did not become ready after %ss.${RESET}\n" "$MAX_WAIT_SECONDS"
+      printf "\n${RED}✖ ERROR: Antidote cluster did not recover after %ss.${RESET}\n" "$MAX_WAIT_SECONDS"
       exit 1
     fi
 
