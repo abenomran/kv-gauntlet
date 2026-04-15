@@ -52,7 +52,7 @@ check_service_health() {
   local cid
   cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$service" 2>/dev/null || true)"
   if [[ -z "$cid" ]]; then
-    echo "starting"
+    echo "missing"
     return 0
   fi
 
@@ -63,7 +63,8 @@ check_service_health() {
     return 0
   fi
 
-  if docker exec "$service" sh -c 'ETCDCTL_API=3 etcdctl --endpoints=http://127.0.0.1:2379 endpoint health >/dev/null 2>&1'; then
+  if docker exec -e ETCDCTL_API=3 "$service" \
+    etcdctl --endpoints=http://127.0.0.1:2379 endpoint health >/dev/null 2>&1; then
     echo "ready"
   else
     echo "starting"
