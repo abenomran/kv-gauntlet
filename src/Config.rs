@@ -27,9 +27,9 @@ pub struct Config {
 pub struct FaultConfig {
     /// Shell script to run to inject the fault
     pub script: String,
-
     /// How many seconds into the run to trigger the fault
     pub trigger_at_seconds: u64,
+    pub restore_script: Option<String>,  // optional: not every run needs restore
 }
 
 impl Config {

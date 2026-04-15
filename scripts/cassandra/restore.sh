@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-COMPOSE_FILE="docker/etcd/docker-compose.yml"
-MAX_WAIT_SECONDS=120
-STATUS_REFRESH_SECONDS=1
+COMPOSE_FILE="docker/cassandra/docker-compose.yml"
+MAX_WAIT_SECONDS=180
+STATUS_REFRESH_SECONDS=2
 SPINNER_INTERVAL=0.1
 
 SPINNER_FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
@@ -18,9 +18,11 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 SERVICES=()
+SERVICE_IPS=()
 SERVICE_STATES=()
-DRAWN_LINES=0
+STATUS_SOURCE=""
 LAST_STATUS_REFRESH=0
+DRAWN_LINES=0
 
 hide_cursor() { tput civis 2>/dev/null || true; }
 show_cursor() { tput cnorm 2>/dev/null || true; }
@@ -35,44 +37,48 @@ get_services() {
   docker compose -f "$COMPOSE_FILE" ps --services
 }
 
+get_container_id() {
+  local service="$1"
+  docker compose -f "$COMPOSE_FILE" ps -q "$service" 2>/dev/null || true
+}
+
+get_container_ip() {
+  local cid="$1"
+  [[ -n "$cid" ]] || return 1
+  docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{if $net.IPAddress}}{{printf "%s\n" $net.IPAddress}}{{end}}{{end}}' "$cid" \
+    | head -n1
+}
+
 init_services() {
   SERVICES=()
+  SERVICE_IPS=()
   SERVICE_STATES=()
 
   while IFS= read -r svc; do
     [[ -n "$svc" ]] || continue
     SERVICES+=("$svc")
-    SERVICE_STATES+=("starting")
+
+    local cid ip
+    cid="$(get_container_id "$svc")"
+    ip="$(get_container_ip "$cid" 2>/dev/null || true)"
+
+    SERVICE_IPS+=("$ip")
+    SERVICE_STATES+=("waiting")
   done < <(get_services)
+
+  if [[ "${#SERVICES[@]}" -gt 0 ]]; then
+    STATUS_SOURCE="${SERVICES[0]}"
+  fi
 }
 
-check_service_health() {
-  local service="$1"
-
-  if ! docker compose -f "$COMPOSE_FILE" ps -q "$service" >/dev/null 2>&1; then
-    echo "missing"
-    return 0
-  fi
-
-  local cid
-  cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$service" 2>/dev/null || true)"
-  if [[ -z "$cid" ]]; then
-    echo "starting"
-    return 0
-  fi
-
-  local running
-  running="$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null || true)"
-  if [[ "$running" != "true" ]]; then
-    echo "starting"
-    return 0
-  fi
-
-  if docker exec "$service" sh -c 'ETCDCTL_API=3 etcdctl --endpoints=http://127.0.0.1:2379 endpoint health >/dev/null 2>&1'; then
-    echo "ready"
-  else
-    echo "starting"
-  fi
+refresh_service_ips() {
+  local i svc cid ip
+  for ((i=0; i<${#SERVICES[@]}; i++)); do
+    svc="${SERVICES[$i]}"
+    cid="$(get_container_id "$svc")"
+    ip="$(get_container_ip "$cid" 2>/dev/null || true)"
+    SERVICE_IPS[$i]="$ip"
+  done
 }
 
 refresh_cluster_status() {
@@ -84,10 +90,34 @@ refresh_cluster_status() {
   fi
   LAST_STATUS_REFRESH="$now"
 
-  local i svc
+  refresh_service_ips
+
+  local raw=""
+  if [[ -n "$STATUS_SOURCE" ]]; then
+    raw="$(docker exec "$STATUS_SOURCE" nodetool status 2>/dev/null || true)"
+  fi
+
+  local i ip state
   for ((i=0; i<${#SERVICES[@]}; i++)); do
-    svc="${SERVICES[$i]}"
-    SERVICE_STATES[$i]="$(check_service_health "$svc")"
+    ip="${SERVICE_IPS[$i]}"
+
+    if [[ -z "$ip" ]]; then
+      SERVICE_STATES[$i]="missing"
+      continue
+    fi
+
+    state="$(awk -v target_ip="$ip" '
+      $1 ~ /^(UN|UJ|UM|DN|DJ|DM|MN|MJ|MM|NL|UL)$/ && $2 == target_ip {
+        print $1
+        found=1
+        exit
+      }
+      END {
+        if (!found) print "waiting"
+      }
+    ' <<< "$raw")"
+
+    SERVICE_STATES[$i]="$state"
   done
 }
 
@@ -95,7 +125,7 @@ count_ready_nodes() {
   local ready=0
   local state
   for state in "${SERVICE_STATES[@]}"; do
-    [[ "$state" == "ready" ]] && ready=$((ready + 1))
+    [[ "$state" == "UN" ]] && ready=$((ready + 1))
   done
   echo "$ready"
 }
@@ -110,7 +140,7 @@ draw_ui() {
   fi
 
   local lines=0
-  printf "\033[K${CYAN}Waiting for etcd cluster to become ready...${RESET}\n"
+  printf "\033[K${CYAN}Waiting for Cassandra cluster to be restored...${RESET}\n"
   lines=$((lines + 1))
 
   printf "\033[K${BOLD}Nodes up: ${CYAN}%d/%d${RESET}\n" "$ready_count" "$total_count"
@@ -122,14 +152,23 @@ draw_ui() {
     state="${SERVICE_STATES[$i]}"
 
     case "$state" in
-      ready)
+      UN)
         printf "\033[K ${GREEN}✔${RESET} %s ${DIM}(ready)${RESET}\n" "$svc"
         ;;
+      UJ|UM)
+        printf "\033[K ${YELLOW}%s${RESET} %s ${DIM}(joining cluster)${RESET}\n" "$spinner" "$svc"
+        ;;
+      DN|DJ|DM)
+        printf "\033[K ${RED}✖${RESET} %s ${DIM}(down)${RESET}\n" "$svc"
+        ;;
       missing)
-        printf "\033[K ${RED}✖${RESET} %s ${DIM}(container not found)${RESET}\n" "$svc"
+        printf "\033[K ${YELLOW}%s${RESET} %s ${DIM}(starting)${RESET}\n" "$spinner" "$svc"
+        ;;
+      waiting)
+        printf "\033[K ${YELLOW}%s${RESET} %s ${DIM}(starting)${RESET}\n" "$spinner" "$svc"
         ;;
       *)
-        printf "\033[K ${YELLOW}%s${RESET} %s ${DIM}(starting)${RESET}\n" "$spinner" "$svc"
+        printf "\033[K ${YELLOW}%s${RESET} %s ${DIM}(%s)${RESET}\n" "$spinner" "$svc" "$state"
         ;;
     esac
 
@@ -140,7 +179,11 @@ draw_ui() {
 }
 
 main() {
-  echo "Starting etcd cluster..."
+  echo "Restoring Cassandra cluster to clean state..."
+  docker compose -f "$COMPOSE_FILE" down -v
+
+  sleep 3
+
   docker compose -f "$COMPOSE_FILE" up -d
 
   init_services
@@ -167,7 +210,7 @@ main() {
     draw_ui "$spinner" "$ready_count" "${#SERVICES[@]}"
 
     if [[ "$ready_count" -eq "${#SERVICES[@]}" ]]; then
-      printf "\n${GREEN}✔ etcd cluster is ready.${RESET}\n"
+      printf "\n${GREEN}✔ Cluster restored successfully.${RESET}\n"
       break
     fi
 
@@ -176,7 +219,7 @@ main() {
     elapsed=$((now - start_ts))
 
     if (( elapsed >= MAX_WAIT_SECONDS )); then
-      printf "\n${RED}✖ ERROR: etcd cluster did not become ready after %ss.${RESET}\n" "$MAX_WAIT_SECONDS"
+      printf "\n${RED}✖ ERROR: Cluster did not recover after %ss.${RESET}\n" "$MAX_WAIT_SECONDS"
       exit 1
     fi
 
