@@ -8,6 +8,7 @@ mod dataset;
 use std::sync::Arc;
 use config::Config;
 use systems::cassandra::CassandraStore;
+use systems::etcd::EtcdStore;
 
 #[tokio::main]
 async fn main() {
@@ -25,6 +26,21 @@ async fn main() {
             ])
             .await
             .expect("Failed to connect to Cassandra");
+
+            let store = Arc::new(store);
+            let dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
+                .expect("Failed to load dataset");
+
+            runner::run(&config, store, dataset).await.expect("Experiment failed");
+        }
+        "etcd" => {
+            let store = EtcdStore::connect(vec![
+                "http://localhost:2379".to_string(),
+                "http://localhost:2380".to_string(),
+                "http://localhost:2381".to_string(),
+            ])
+            .await
+            .expect("Failed to connect to etcd");
 
             let store = Arc::new(store);
             let dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
