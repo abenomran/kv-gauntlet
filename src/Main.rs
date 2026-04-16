@@ -20,6 +20,9 @@ async fn main() {
     println!("Workload: {}", config.workload);
     println!("Duration: {}s", config.duration_seconds);
 
+    let dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
+        .expect("Failed to load dataset");
+
     match config.system.as_str() {
         "cassandra" => {
             for run_index in 0..num_runs {
@@ -32,10 +35,10 @@ async fn main() {
                 .expect("Failed to connect to Cassandra");
 
                 let store = Arc::new(store);
-                let run_dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
-                    .expect("Failed to load dataset");
 
-                runner::run(&config, store, run_dataset).await.expect("Experiment failed");
+                runner::run(&config, store, dataset.clone(), run_index)
+                    .await
+                    .expect("Experiment failed");
             }
         }
         "antidote" => {
@@ -47,10 +50,10 @@ async fn main() {
                     .expect("Failed to connect to Antidote");
 
                 let store = Arc::new(store);
-                let run_dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
-                    .expect("Failed to load dataset");
 
-                runner::run(&config, store, run_dataset).await.expect("Experiment failed");
+                runner::run(&config, store, dataset.clone(), run_index)
+                    .await
+                    .expect("Experiment failed");
             }
         }
         other => {
