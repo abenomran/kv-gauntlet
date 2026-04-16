@@ -2,13 +2,14 @@ use serde::Deserialize;
 use std::fs;
 
 /// One record from the Wikipedia dataset
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct WikiRecord {
     pub key: String,
     pub value: String,
 }
 
 /// Holds all loaded records in memory
+#[derive(Clone)]
 pub struct Dataset {
     pub records: Vec<WikiRecord>,
 }

@@ -18,19 +18,28 @@ async fn main() {
     println!("Workload: {}", config.workload);
     println!("Duration: {}s", config.duration_seconds);
 
+    let dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
+        .expect("Failed to load dataset");
+
+    let num_runs = config.num_runs;
+
     match config.system.as_str() {
-        "cassandra" => {
-            let store = CassandraStore::connect(vec![
-                "127.0.0.1:9042".to_string(),
-            ])
-            .await
-            .expect("Failed to connect to Cassandra");
+       "cassandra" => {
+            for run_index in 0..num_runs {
+                println!("\n=== Starting run {} / {} ===", run_index + 1, num_runs);
 
-            let store = Arc::new(store);
-            let dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
-                .expect("Failed to load dataset");
+                let store = CassandraStore::connect(vec![
+                    "127.0.0.1:9042".to_string(),
+                ])
+                .await
+                .expect("Failed to connect to Cassandra");
 
-            runner::run(&config, store, dataset).await.expect("Experiment failed");
+                let store = Arc::new(store);
+
+                runner::run(&config, store, dataset.clone(), run_index)
+                    .await
+                    .expect("Experiment failed");
+            }
         }
         other => {
             eprintln!("Unknown system: {}. Supported: cassandra", other);

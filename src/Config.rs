@@ -19,6 +19,9 @@ pub struct Config {
     /// Where to write metrics output
     pub output_file: String,
 
+    /// number of experiment trials
+    pub num_runs: u64,
+
     /// Fault injection config (optional)
     pub fault: Option<FaultConfig>,
 }
