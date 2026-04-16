@@ -30,20 +30,23 @@ impl WorkloadType {
 
 /// Generates the next operation based on the workload type and dataset.
 /// `i` is the operation index, used to cycle through dataset records deterministically.
-pub fn next_operation(kind: &WorkloadType, dataset: &Dataset, i: u64) -> Operation {
-    // Pull the record at position i, cycling back to the start when we exhaust the dataset
-    let record = dataset.get(i);
+pub fn next_operation(kind: &WorkloadType, dataset: &Dataset, i: u64, run_index: u64) -> Operation {
+    // XOR with run_index to get different sequences per repetition
+    let effective_i = i ^ (run_index.wrapping_mul(0xdeadbeef));
+    let record = dataset.get(effective_i);
 
+    // decision: use a hash of (i, run_index) for independence
+    let write_roll = (i.wrapping_add(run_index.wrapping_mul(6364136223846793005))) % 100;
+    
     // Decide read vs write based on workload type
     let write_percent: u64 = match kind {
-        WorkloadType::Balanced   => 50,
-        WorkloadType::ReadHeavy  => 5,
+        WorkloadType::Balanced => 50,
+        WorkloadType::ReadHeavy => 5,
         WorkloadType::WriteHeavy => 95,
         WorkloadType::Contention => 95,
     };
 
-    // Use modulo to alternate deterministically — no randomness needed
-    if i % 100 < write_percent {
+    if write_roll < write_percent {
         // For contention, all writes go to the same key regardless of dataset record
         let key = match kind {
             WorkloadType::Contention => "contention_key".to_string(),

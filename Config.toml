@@ -5,6 +5,7 @@ workload = "balanced"
 duration_seconds = 60
 concurrency = 4
 output_file = "results.csv"
+num_runs = 3
 
 # Optional: remove this section to run without fault injection
 # set file path to match system (i.e "etcd", "cassandra", or "antidote")
