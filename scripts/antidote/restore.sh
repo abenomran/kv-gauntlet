@@ -63,7 +63,9 @@ check_service_health() {
     return 0
   fi
 
-  if docker logs "$cid" 2>&1 | grep -q "Application antidote started on node"; then
+  # This image reports startup with lines like: "started_at: antidote@antidote1"
+  # Avoid grep -q with pipefail (docker logs may get SIGPIPE and look like failure).
+  if docker logs "$cid" 2>&1 | grep -F "started_at: antidote@${service}" >/dev/null; then
     echo "ready"
   else
     echo "starting"

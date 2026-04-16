@@ -8,10 +8,11 @@ mod dataset;
 use std::sync::Arc;
 use config::Config;
 use systems::cassandra::CassandraStore;
+use systems::antidote::AntidoteStore;
 
 #[tokio::main]
 async fn main() {
-    let config = Config::load("config.toml").expect("Failed to load config.toml");
+    let config = Config::load("Config.toml").expect("Failed to load Config.toml");
 
     println!("Starting gauntlet!");
     println!("System:   {}", config.system);
@@ -32,8 +33,19 @@ async fn main() {
 
             runner::run(&config, store, dataset).await.expect("Experiment failed");
         }
+        "antidote" => {
+            let store = AntidoteStore::connect("antidote1".to_string())
+                .await
+                .expect("Failed to connect to Antidote");
+
+            let store = Arc::new(store);
+            let dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
+                .expect("Failed to load dataset");
+
+            runner::run(&config, store, dataset).await.expect("Experiment failed");
+        }
         other => {
-            eprintln!("Unknown system: {}. Supported: cassandra", other);
+            eprintln!("Unknown system: {}. Supported: cassandra, antidote", other);
             std::process::exit(1);
         }
     }
