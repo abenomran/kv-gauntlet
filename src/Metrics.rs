@@ -43,10 +43,13 @@ impl MetricsWriter {
         let mut writer = BufWriter::new(file);
 
         // write header row
-        writeln!(writer, "timestamp,elapsed_seconds,system,workload,operation,key,latency_ms,success")?;
+        writeln!(
+            writer,
+            "timestamp,elapsed_seconds,run_index,system,workload,operation,key,latency_ms,success,version,fault_active"
+        )?;
         writer.flush()?;
 
-        Ok(Self { 
+        Ok(Self {
             writer,
             start_time: std::time::Instant::now(),
         })
