@@ -23,8 +23,10 @@ async fn main() {
     let dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
         .expect("Failed to load dataset");
 
+    let num_runs = config.num_runs;
+
     match config.system.as_str() {
-        "cassandra" => {
+       "cassandra" => {
             for run_index in 0..num_runs {
                 println!("\n=== Starting run {} / {} ===", run_index + 1, num_runs);
 

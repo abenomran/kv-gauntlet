@@ -5,12 +5,15 @@ use chrono::Local;
 
 /// One recorded data point per request
 pub struct MetricEntry {
+    pub run_index: u64,
     pub key: String,
     pub system: String,
     pub workload: String,
     pub operation: String, // "GET" or "PUT"
     pub latency_ms: f64,
     pub success: bool,
+    pub version: Option<u64>, // version written (PUT) or observed (GET)
+    pub fault_active: bool, // was fault injected at time of this op?
 }
 
 /// Writes metrics to a CSV file in real time.
@@ -55,15 +58,18 @@ impl MetricsWriter {
         let timestamp = Local::now().to_rfc3339();
         writeln!(
             self.writer,
-            "{},{:.3},{},{},{},\"{}\",{:.3},{}",
+            "{},{:.3},{},{},{},{},\"{}\",{:.3},{},{},{}",
             timestamp,
             elapsed,
+            entry.run_index,
             entry.system,
             entry.workload,
             entry.operation,
             entry.key,
             entry.latency_ms,
             entry.success,
+            entry.version.map(|v| v.to_string()).unwrap_or_default(),
+            entry.fault_active as u8,
         )?;
         self.writer.flush()?;
         Ok(())
