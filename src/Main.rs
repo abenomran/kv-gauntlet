@@ -8,6 +8,7 @@ mod dataset;
 use std::sync::Arc;
 use config::Config;
 use systems::cassandra::CassandraStore;
+use systems::etcd::EtcdStore;
 use systems::antidote::AntidoteStore;
 
 #[tokio::main]
@@ -56,6 +57,25 @@ async fn main() {
                 runner::run(&config, store, dataset.clone(), run_index)
                     .await
                     .expect("Experiment failed");
+            }
+        }
+        "etcd" => {
+            for run_index in 0..num_runs {
+                println!("\n=== Starting run {} / {} ===", run_index + 1, num_runs);
+              
+                let store = EtcdStore::connect(vec![
+                    "http://localhost:2379".to_string(),
+                    "http://localhost:2380".to_string(),
+                    "http://localhost:2381".to_string(),
+                ])
+                .await
+                .expect("Failed to connect to etcd");
+
+                let store = Arc::new(store);
+
+                runner::run(&config, store, dataset.clone(), run_index)
+                        .await
+                        .expect("Experiment failed");
             }
         }
         other => {
