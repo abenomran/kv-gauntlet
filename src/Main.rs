@@ -9,47 +9,77 @@ use std::sync::Arc;
 use config::Config;
 use systems::cassandra::CassandraStore;
 use systems::etcd::EtcdStore;
+use systems::antidote::AntidoteStore;
 
 #[tokio::main]
 async fn main() {
-    let config = Config::load("config.toml").expect("Failed to load config.toml");
+    let config = Config::load("Config.toml").expect("Failed to load Config.toml");
+    let num_runs = config.num_runs;
 
     println!("Starting gauntlet!");
     println!("System:   {}", config.system);
     println!("Workload: {}", config.workload);
     println!("Duration: {}s", config.duration_seconds);
 
+    let dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
+        .expect("Failed to load dataset");
+
+    let num_runs = config.num_runs;
+
     match config.system.as_str() {
-        "cassandra" => {
-            let store = CassandraStore::connect(vec![
-                "127.0.0.1:9042".to_string(),
-            ])
-            .await
-            .expect("Failed to connect to Cassandra");
+       "cassandra" => {
+            for run_index in 0..num_runs {
+                println!("\n=== Starting run {} / {} ===", run_index + 1, num_runs);
 
-            let store = Arc::new(store);
-            let dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
-                .expect("Failed to load dataset");
+                let store = CassandraStore::connect(vec![
+                    "127.0.0.1:9042".to_string(),
+                ])
+                .await
+                .expect("Failed to connect to Cassandra");
 
-            runner::run(&config, store, dataset).await.expect("Experiment failed");
+                let store = Arc::new(store);
+
+                runner::run(&config, store, dataset.clone(), run_index)
+                    .await
+                    .expect("Experiment failed");
+            }
+        }
+        "antidote" => {
+            for run_index in 0..num_runs {
+                println!("\n=== Starting run {} / {} ===", run_index + 1, num_runs);
+
+                let store = AntidoteStore::connect("antidote1".to_string())
+                    .await
+                    .expect("Failed to connect to Antidote");
+
+                let store = Arc::new(store);
+
+                runner::run(&config, store, dataset.clone(), run_index)
+                    .await
+                    .expect("Experiment failed");
+            }
         }
         "etcd" => {
-            let store = EtcdStore::connect(vec![
-                "http://localhost:2379".to_string(),
-                "http://localhost:2380".to_string(),
-                "http://localhost:2381".to_string(),
-            ])
-            .await
-            .expect("Failed to connect to etcd");
+            for run_index in 0..num_runs {
+                println!("\n=== Starting run {} / {} ===", run_index + 1, num_runs);
+              
+                let store = EtcdStore::connect(vec![
+                    "http://localhost:2379".to_string(),
+                    "http://localhost:2380".to_string(),
+                    "http://localhost:2381".to_string(),
+                ])
+                .await
+                .expect("Failed to connect to etcd");
 
-            let store = Arc::new(store);
-            let dataset = dataset::Dataset::load("dataset/wikipedia_10k.json")
-                .expect("Failed to load dataset");
+                let store = Arc::new(store);
 
-            runner::run(&config, store, dataset).await.expect("Experiment failed");
+                runner::run(&config, store, dataset.clone(), run_index)
+                        .await
+                        .expect("Experiment failed");
+            }
         }
         other => {
-            eprintln!("Unknown system: {}. Supported: cassandra", other);
+            eprintln!("Unknown system: {}. Supported: cassandra, antidote", other);
             std::process::exit(1);
         }
     }

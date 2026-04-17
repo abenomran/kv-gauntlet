@@ -49,10 +49,15 @@ init_services() {
 check_service_health() {
   local service="$1"
 
+  if ! docker compose -f "$COMPOSE_FILE" ps -q "$service" >/dev/null 2>&1; then
+    echo "missing"
+    return 0
+  fi
+
   local cid
   cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$service" 2>/dev/null || true)"
   if [[ -z "$cid" ]]; then
-    echo "missing"
+    echo "starting"
     return 0
   fi
 

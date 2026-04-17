@@ -1,6 +1,6 @@
 #!/bin/bash
 
-NODE=${1:-etcd2}
+NODE=${1:-antidote2}
 
 echo "Killing node: $NODE"
 docker stop $NODE
